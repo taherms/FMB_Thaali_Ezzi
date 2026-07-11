@@ -64,33 +64,51 @@ async function handleAuthStateChange(user) {
     return;
   }
 
-  await ensureUserProfile(user);
-  renderAuthUI();
-  subscribeToThaalis();
-  subscribeToPreferences();
-  subscribeToSettings();
+  try {
+    await ensureUserProfile(user);
+    renderAuthUI();
+    subscribeToThaalis();
+    subscribeToPreferences();
+    subscribeToSettings();
+  } catch (error) {
+    console.warn('Firestore access blocked:', error);
+    renderAuthUI();
+    renderDashboard();
+    elements.formMessage.textContent = 'Signed in successfully, but Firestore access is blocked. Please update your Firestore rules.';
+    elements.formMessage.className = 'form-message error';
+  }
 }
 
 async function ensureUserProfile(user) {
-  const profileRef = db.collection('users').doc(user.uid);
-  const existing = await profileRef.get();
+  try {
+    const profileRef = db.collection('users').doc(user.uid);
+    const existing = await profileRef.get();
 
-  if (!existing.exists) {
-    const adminSnapshot = await db.collection('users').where('role', '==', 'admin').limit(1).get();
-    const role = adminSnapshot.empty ? 'admin' : 'volunteer';
-    const profile = {
+    if (!existing.exists) {
+      const adminSnapshot = await db.collection('users').where('role', '==', 'admin').limit(1).get();
+      const role = adminSnapshot.empty ? 'admin' : 'volunteer';
+      const profile = {
+        uid: user.uid,
+        email: user.email,
+        name: user.displayName || user.email.split('@')[0],
+        role,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      };
+      await profileRef.set(profile);
+      currentProfile = profile;
+      return;
+    }
+
+    currentProfile = existing.data();
+  } catch (error) {
+    console.warn('Profile setup blocked by Firestore rules:', error);
+    currentProfile = {
       uid: user.uid,
       email: user.email,
       name: user.displayName || user.email.split('@')[0],
-      role,
-      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      role: 'volunteer'
     };
-    await profileRef.set(profile);
-    currentProfile = profile;
-    return;
   }
-
-  currentProfile = existing.data();
 }
 
 function renderAuthUI() {
@@ -108,28 +126,46 @@ function renderAuthUI() {
 }
 
 function subscribeToThaalis() {
-  thaalisUnsub = db.collection('thaalis').orderBy('createdAt', 'desc').onSnapshot((snapshot) => {
-    thaalis = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-    renderDashboard();
-  });
+  thaalisUnsub = db.collection('thaalis').orderBy('createdAt', 'desc').onSnapshot(
+    (snapshot) => {
+      thaalis = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+      renderDashboard();
+    },
+    (error) => {
+      console.warn('Thaali feed blocked:', error);
+      renderDashboard();
+    }
+  );
 }
 
 function subscribeToPreferences() {
-  preferencesUnsub = db.collection('userPreferences').doc(currentUser.uid).onSnapshot((snapshot) => {
-    currentPreferences = snapshot.exists ? snapshot.data() : null;
-    renderDashboard();
-  });
+  preferencesUnsub = db.collection('userPreferences').doc(currentUser.uid).onSnapshot(
+    (snapshot) => {
+      currentPreferences = snapshot.exists ? snapshot.data() : null;
+      renderDashboard();
+    },
+    (error) => {
+      console.warn('Preferences feed blocked:', error);
+      renderDashboard();
+    }
+  );
 }
 
 function subscribeToSettings() {
-  settingsUnsub = db.collection('settings').doc('deliveryOrder').onSnapshot((snapshot) => {
-    if (snapshot.exists) {
-      orderNeedsReview = Boolean(snapshot.data().needsReview);
-    } else {
-      orderNeedsReview = false;
+  settingsUnsub = db.collection('settings').doc('deliveryOrder').onSnapshot(
+    (snapshot) => {
+      if (snapshot.exists) {
+        orderNeedsReview = Boolean(snapshot.data().needsReview);
+      } else {
+        orderNeedsReview = false;
+      }
+      renderDashboard();
+    },
+    (error) => {
+      console.warn('Settings feed blocked:', error);
+      renderDashboard();
     }
-    renderDashboard();
-  });
+  );
 }
 
 function renderDashboard() {
@@ -284,15 +320,21 @@ async function onRegister(event) {
     if (name) {
       await result.user.updateProfile({ displayName: name });
     }
-    const adminSnapshot = await db.collection('users').where('role', '==', 'admin').limit(1).get();
-    const role = adminSnapshot.empty ? 'admin' : 'volunteer';
-    await db.collection('users').doc(result.user.uid).set({
-      uid: result.user.uid,
-      email: result.user.email,
-      name,
-      role,
-      createdAt: firebase.firestore.FieldValue.serverTimestamp()
-    }, { merge: true });
+
+    try {
+      const adminSnapshot = await db.collection('users').where('role', '==', 'admin').limit(1).get();
+      const role = adminSnapshot.empty ? 'admin' : 'volunteer';
+      await db.collection('users').doc(result.user.uid).set({
+        uid: result.user.uid,
+        email: result.user.email,
+        name,
+        role,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+    } catch (firestoreError) {
+      console.warn('User profile write blocked by Firestore rules:', firestoreError);
+    }
+
     event.target.reset();
   } catch (error) {
     alert(error.message);
