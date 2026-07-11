@@ -1,5 +1,6 @@
-const auth = firebase.auth();
-const db = firebase.firestore();
+const firebaseApp = firebase.apps.length ? firebase.app() : firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth(firebaseApp);
+const db = firebase.firestore(firebaseApp);
 
 let currentUser = null;
 let currentProfile = null;
