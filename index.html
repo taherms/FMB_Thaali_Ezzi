@@ -1,11 +1,48 @@
 <!DOCTYPE html>
-<html><head><meta charset="UTF-8"><title>FMB Thaali Ezzi</title>
-<link rel="stylesheet" href="css/style.css"></head>
-<body>
-<div class="header"><h1>FMB Thaali Ezzi Sector</h1></div>
-<div class="container">
-<h2>Firebase Config Required</h2>
-<p>Edit js/firebase-config.js with your Firebase settings.</p>
-<button onclick="location.href='dashboard.html'">Open Dashboard</button>
-</div>
-</body></html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FMB Thaali Ezzi Sector</title>
+    <link rel="stylesheet" href="css/style.css" />
+  </head>
+  <body class="landing-page">
+    <header class="hero">
+      <div class="hero__brand">
+        <img src="https://fmb.houstonjamaat.com/admin/images/logo.png" alt="FMB logo" />
+        <div>
+          <p class="eyebrow">Fatemi Islamic Community</p>
+          <h1>FMB Thaali Ezzi Sector</h1>
+        </div>
+      </div>
+      <p class="hero__text">
+        Manage thaali distribution, assign volunteers, and let each family view locations and save their preferred delivery order in one elegant dashboard.
+      </p>
+      <div class="hero__actions">
+        <a class="btn btn--primary" href="dashboard.html">Open Dashboard</a>
+        <a class="btn btn--secondary" href="README.txt">Setup Guide</a>
+      </div>
+    </header>
+
+    <main class="landing-grid">
+      <section class="card">
+        <h2>What this app does</h2>
+        <ul>
+          <li>Admins add, edit, and remove thaali records.</li>
+          <li>Each user logs in with their own account and saves a personal delivery order.</li>
+          <li>Locations open in Google Maps and show the full route quickly.</li>
+          <li>Everyone is notified when a new thaali is added or a location changes.</li>
+        </ul>
+      </section>
+      <section class="card">
+        <h2>How to launch on GitHub Pages</h2>
+        <ol>
+          <li>Replace the sample Firebase config in the project.</li>
+          <li>Enable Firebase Authentication and Firestore.</li>
+          <li>Push the files to GitHub and publish the repository through Pages.</li>
+          <li>Open the dashboard and sign up to start using the app.</li>
+        </ol>
+      </section>
+    </main>
+  </body>
+</html>

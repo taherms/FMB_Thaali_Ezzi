@@ -1,5 +1,142 @@
 
-body{font-family:Arial,sans-serif;background:#f6f8f4;margin:0}
-.header{background:#0f5c4d;color:white;padding:20px;text-align:center}
-.container{padding:20px}
-button{padding:10px 16px}
+:root {
+  --green: #0f5c4d;
+  --green-dark: #0a3d31;
+  --gold: #c8a24f;
+  --cream: #f8f3ea;
+  --text: #22312c;
+  --muted: #64716d;
+  --border: #ded4bd;
+  --danger: #a33a3a;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: "Segoe UI", Arial, sans-serif;
+  color: var(--text);
+  background: linear-gradient(135deg, #f8f3ea 0%, #f3e7c8 100%);
+  line-height: 1.5;
+}
+img { max-width: 100%; display: block; }
+a { color: var(--green); }
+button, input, textarea { font: inherit; }
+
+.hero, .page-header, .card, .notice-banner {
+  box-shadow: 0 16px 40px rgba(15, 92, 77, 0.12);
+}
+
+.hero {
+  background: linear-gradient(135deg, rgba(15,92,77,0.95), rgba(10,61,49,0.95));
+  color: white;
+  padding: 48px 24px;
+  text-align: center;
+}
+.hero__brand, .page-header__brand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.hero img, .page-header img {
+  width: 72px;
+  height: 72px;
+  border-radius: 16px;
+  background: white;
+  padding: 8px;
+}
+.hero h1, .page-header h1 { margin: 0; font-size: clamp(1.6rem, 3vw, 2.2rem); }
+.hero__text { max-width: 740px; margin: 0 auto 24px; font-size: 1.05rem; }
+.eyebrow {
+  margin: 0 0 4px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  font-size: 0.8rem;
+  color: var(--gold);
+}
+.btn {
+  border: none;
+  border-radius: 999px;
+  padding: 10px 16px;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-block;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.btn:hover { transform: translateY(-1px); }
+.btn--primary { background: var(--gold); color: #2f2208; }
+.btn--secondary { background: white; color: var(--green-dark); }
+.hero__actions, .button-row { display: flex; gap: 12px; flex-wrap: wrap; }
+
+.landing-grid, .dashboard-grid, .auth-grid {
+  display: grid;
+  gap: 20px;
+  padding: 24px;
+}
+.landing-grid, .dashboard-grid { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+.auth-grid { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.page-header {
+  background: rgba(255,255,255,0.86);
+  backdrop-filter: blur(12px);
+  padding: 20px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+.card {
+  background: rgba(255,255,255,0.95);
+  border-radius: 24px;
+  padding: 24px;
+  border: 1px solid var(--border);
+}
+.auth-shell { margin: 24px; }
+.auth-shell__intro { margin-bottom: 20px; }
+.panel-form, .stacked-form { display: grid; gap: 12px; }
+label { display: grid; gap: 6px; font-weight: 600; }
+input, textarea {
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: #fffdf8;
+}
+.stats-card { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin: 24px; }
+.profile-card { padding-left: 12px; border-left: 2px solid var(--gold); }
+.notice-banner {
+  margin: 0 24px 16px;
+  padding: 14px 18px;
+  border-radius: 16px;
+  background: #fff3d2;
+  color: #705300;
+}
+.section-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 16px; }
+.list-stack { display: grid; gap: 12px; }
+.thaali-card, .order-row {
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 14px;
+  background: #fffdf8;
+}
+.thaali-card__top { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+.badge {
+  background: rgba(15,92,77,0.12);
+  color: var(--green);
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+}
+.checkbox-row { display: flex; flex-wrap: wrap; gap: 12px; }
+.checkbox-row label { display: inline-flex; align-items: center; gap: 6px; font-weight: 500; }
+.muted { color: var(--muted); }
+.form-message { min-height: 1.2em; font-weight: 600; }
+.form-message.success { color: var(--green); }
+.form-message.error { color: var(--danger); }
+.hidden { display: none !important; }
+@media (max-width: 700px) {
+  .page-header { flex-direction: column; align-items: flex-start; }
+  .stats-card { flex-direction: column; }
+  .hero, .card, .auth-shell { padding: 20px; }
+}

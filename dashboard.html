@@ -1,7 +1,132 @@
 <!DOCTYPE html>
-<html><head><meta charset="UTF-8"><title>Dashboard</title>
-<link rel="stylesheet" href="css/style.css"></head>
-<body>
-<h1>Thaali Dashboard</h1>
-<div id="app">Starter template. Extend with Firestore collections: users, thaalis, routes, assignments.</div>
-</body></html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FMB Thaali Ezzi Dashboard</title>
+    <link rel="stylesheet" href="css/style.css" />
+  </head>
+  <body>
+    <header class="page-header">
+      <div class="page-header__brand">
+        <img src="https://fmb.houstonjamaat.com/admin/images/logo.png" alt="FMB logo" />
+        <div>
+          <p class="eyebrow">FMB Thaali Ezzi Sector</p>
+          <h1>Community Delivery Dashboard</h1>
+        </div>
+      </div>
+      <button id="logoutBtn" class="btn btn--secondary hidden">Log Out</button>
+    </header>
+
+    <main>
+      <section id="authPanel" class="auth-shell card">
+        <div class="auth-shell__intro">
+          <h2>Welcome</h2>
+          <p>Create an account or sign in to view thaali records, assign volunteers, and save your personal route order.</p>
+        </div>
+        <div class="auth-grid">
+          <form id="loginForm" class="panel-form">
+            <h3>Sign In</h3>
+            <label>Email<input type="email" name="email" required /></label>
+            <label>Password<input type="password" name="password" required /></label>
+            <button class="btn btn--primary" type="submit">Sign In</button>
+          </form>
+          <form id="registerForm" class="panel-form">
+            <h3>Create Account</h3>
+            <label>Name<input type="text" name="name" placeholder="Your full name" /></label>
+            <label>Email<input type="email" name="email" required /></label>
+            <label>Password<input type="password" name="password" required /></label>
+            <button class="btn btn--secondary" type="submit">Create Account</button>
+          </form>
+        </div>
+      </section>
+
+      <section id="appShell" class="hidden">
+        <section class="card stats-card">
+          <div>
+            <p class="eyebrow">Thaali count</p>
+            <h2 id="statsCount">0</h2>
+          </div>
+          <div>
+            <p class="eyebrow">Assigned volunteers</p>
+            <h2 id="volunteerCount">0</h2>
+          </div>
+          <div class="profile-card">
+            <p class="eyebrow">Signed in as</p>
+            <h3 id="profileName">User</h3>
+            <p id="profileRole">Volunteer</p>
+          </div>
+        </section>
+
+        <div id="noticeBanner" class="notice-banner hidden"></div>
+
+        <section id="adminPanel" class="card">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Admin tools</p>
+              <h2 id="formTitle">Add a thaali</h2>
+            </div>
+            <button id="cancelEditBtn" class="btn btn--secondary hidden" type="button">Cancel Edit</button>
+          </div>
+          <p id="adminNotice" class="muted hidden">Only admins can add or edit thaali details. Volunteers can still save their personal delivery route order.</p>
+          <form id="thaaliForm" class="stacked-form">
+            <input type="hidden" id="thaaliId" name="thaaliId" />
+            <div class="field-grid">
+              <label>Thaali Name<input id="thaaliName" type="text" name="name" required /></label>
+              <label>Person Name<input id="personName" type="text" name="personName" /></label>
+              <label>Location<input id="location" type="text" name="location" required /></label>
+              <label>Role<input id="role" type="text" name="role" placeholder="Example: kitchen lead" /></label>
+              <label>Volunteer<input id="volunteer" type="text" name="volunteer" placeholder="Volunteer name" /></label>
+              <label>Phone<input id="contactPhone" type="text" name="contactPhone" /></label>
+            </div>
+            <label>Delivery Days</label>
+            <div class="checkbox-row">
+              <label><input type="checkbox" name="deliveryDays" value="Sunday" /> Sunday</label>
+              <label><input type="checkbox" name="deliveryDays" value="Monday" /> Monday</label>
+              <label><input type="checkbox" name="deliveryDays" value="Tuesday" /> Tuesday</label>
+              <label><input type="checkbox" name="deliveryDays" value="Wednesday" /> Wednesday</label>
+              <label><input type="checkbox" name="deliveryDays" value="Thursday" /> Thursday</label>
+              <label><input type="checkbox" name="deliveryDays" value="Friday" /> Friday</label>
+              <label><input type="checkbox" name="deliveryDays" value="Saturday" /> Saturday</label>
+            </div>
+            <label>Notes<textarea id="notes" name="notes" rows="3"></textarea></label>
+            <div class="button-row">
+              <button class="btn btn--primary" type="submit">Save Thaali</button>
+            </div>
+            <p id="formMessage" class="form-message"></p>
+          </form>
+        </section>
+
+        <section class="dashboard-grid">
+          <section class="card">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">Thaali directory</p>
+                <h2>Available thaalis</h2>
+              </div>
+            </div>
+            <div id="thaaliList" class="list-stack"></div>
+          </section>
+
+          <section class="card">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">Personal route</p>
+                <h2>Delivery order</h2>
+              </div>
+              <button id="saveOrderBtn" class="btn btn--primary" type="button">Save Order</button>
+            </div>
+            <p class="muted">Reorder the locations and save them for future use.</p>
+            <div id="orderList" class="list-stack"></div>
+          </section>
+        </section>
+      </section>
+    </main>
+
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+    <script src="js/firebase-config.js"></script>
+    <script src="js/app.js"></script>
+  </body>
+</html>
