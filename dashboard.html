@@ -24,7 +24,7 @@
       <section id="authPanel" class="auth-shell card">
         <div class="auth-shell__intro">
           <h2>Welcome</h2>
-          <p>Create an account or sign in to view the member directory, manage your drop-off address, track delivery turns, and see the kidmat leaderboard.</p>
+          <p>Create an account or sign in. New accounts need admin approval before the dashboard unlocks — once approved you can view the member directory, manage your drop-off address, track delivery turns, and see the kidmat leaderboard.</p>
         </div>
         <div class="auth-grid">
           <form id="loginForm" class="panel-form">
@@ -44,47 +44,53 @@
       </section>
 
       <section id="appShell" class="hidden">
-        <section class="card stats-card">
-          <div>
-            <p class="eyebrow">Members</p>
-            <h2 id="statsMembers">0</h2>
-          </div>
-          <div>
-            <p class="eyebrow">Turns completed</p>
-            <h2 id="statsCompleted">0</h2>
-          </div>
-          <div>
-            <p class="eyebrow">Turns upcoming</p>
-            <h2 id="statsUpcoming">0</h2>
-          </div>
-          <div class="profile-card">
-            <p class="eyebrow">Signed in as</p>
-            <h3 id="profileName">User</h3>
-            <p id="profileRole">Member</p>
-          </div>
+        <section id="pendingGate" class="card auth-shell hidden">
+          <h2 id="pendingGateTitle">Awaiting approval</h2>
+          <p id="pendingGateText" class="muted">Your account has been created but an administrator needs to approve it before you can use the dashboard. Check back soon, or contact your sector admin.</p>
         </section>
 
-        <div id="reminderBanner" class="reminder-banner hidden"></div>
-        <div id="noticeBanner" class="notice-banner hidden"></div>
+        <div id="mainContent">
+          <section class="card stats-card">
+            <div>
+              <p class="eyebrow">Members</p>
+              <h2 id="statsMembers">0</h2>
+            </div>
+            <div>
+              <p class="eyebrow">Turns completed</p>
+              <h2 id="statsCompleted">0</h2>
+            </div>
+            <div>
+              <p class="eyebrow">Turns upcoming</p>
+              <h2 id="statsUpcoming">0</h2>
+            </div>
+            <div class="profile-card">
+              <p class="eyebrow">Signed in as</p>
+              <h3 id="profileName">User</h3>
+              <p id="profileRole">Member</p>
+            </div>
+          </section>
 
-        <nav id="tabBar" class="tab-bar">
-          <button class="tab-btn active" type="button" data-tab="overview">Overview</button>
-          <button class="tab-btn" type="button" data-tab="directory">Directory</button>
-          <button class="tab-btn" type="button" data-tab="turns">My Turns</button>
-          <button class="tab-btn" type="button" data-tab="address">My Address</button>
-          <button class="tab-btn" type="button" data-tab="leaderboard">Leaderboard</button>
-          <button class="tab-btn admin-only hidden" type="button" data-tab="admin-turns">Assign Turns</button>
-          <button class="tab-btn admin-only hidden" type="button" data-tab="admin-members">Members</button>
-        </nav>
+          <div id="reminderBanner" class="reminder-banner hidden"></div>
+          <div id="noticeBanner" class="notice-banner hidden"></div>
 
-        <section id="tab-overview" class="tab-panel active card">
+          <nav id="tabBar" class="tab-bar">
+            <button class="tab-btn active" type="button" data-tab="overview">Overview</button>
+            <button class="tab-btn" type="button" data-tab="directory">Directory</button>
+            <button class="tab-btn" type="button" data-tab="turns">My Turns</button>
+            <button class="tab-btn" type="button" data-tab="profile">My Profile</button>
+            <button class="tab-btn" type="button" data-tab="leaderboard">Leaderboard</button>
+            <button class="tab-btn admin-only hidden" type="button" data-tab="admin-turns">Assign Turns</button>
+            <button class="tab-btn admin-only hidden" type="button" data-tab="admin-members" id="membersTabBtn">Members</button>
+          </nav>
+
+          <section id="tab-overview" class="tab-panel active card">
           <div class="section-heading">
             <div>
               <p class="eyebrow">Salaams</p>
               <h2>Sector overview</h2>
             </div>
           </div>
-          <p class="muted">Use the tabs above to view the address directory, manage your own drop-off address, track your delivery turns, and check the kidmat leaderboard. Notices about updates and reminders for turns due tomorrow will appear here.</p>
+          <p class="muted">Use the tabs above to view the address directory, manage your profile, track your delivery turns, and check the kidmat leaderboard. Notices about updates and reminders for turns due tomorrow will appear here.</p>
         </section>
 
         <section id="tab-directory" class="tab-panel card">
@@ -110,7 +116,7 @@
           <div id="myTurnsList" class="list-stack"></div>
         </section>
 
-        <section id="tab-address" class="tab-panel card">
+        <section id="tab-profile" class="tab-panel card">
           <div class="section-heading">
             <div>
               <p class="eyebrow">Self-service</p>
@@ -132,6 +138,39 @@
               <button class="btn btn--primary" type="submit">Save Address</button>
             </div>
             <p id="addressMessage" class="form-message"></p>
+          </form>
+
+          <div class="section-heading" style="margin-top:24px;">
+            <div>
+              <p class="eyebrow">Account security</p>
+              <h3>Change email</h3>
+            </div>
+          </div>
+          <form id="changeEmailForm" class="stacked-form">
+            <div class="field-grid">
+              <label>New Email<input id="newEmail" type="email" name="newEmail" required /></label>
+              <label>Current Password<input id="emailCurrentPassword" type="password" name="currentPassword" required /></label>
+            </div>
+            <div class="button-row">
+              <button class="btn btn--secondary" type="submit">Update Email</button>
+            </div>
+            <p id="emailMessage" class="form-message"></p>
+          </form>
+
+          <div class="section-heading" style="margin-top:24px;">
+            <div>
+              <h3>Change password</h3>
+            </div>
+          </div>
+          <form id="changePasswordForm" class="stacked-form">
+            <div class="field-grid">
+              <label>Current Password<input id="currentPassword" type="password" name="currentPassword" required /></label>
+              <label>New Password<input id="newPassword" type="password" name="newPassword" required minlength="6" /></label>
+            </div>
+            <div class="button-row">
+              <button class="btn btn--secondary" type="submit">Update Password</button>
+            </div>
+            <p id="passwordMessage" class="form-message"></p>
           </form>
         </section>
 
@@ -192,6 +231,7 @@
           </div>
           <div id="membersList" class="list-stack"></div>
         </section>
+        </div>
       </section>
     </main>
 
