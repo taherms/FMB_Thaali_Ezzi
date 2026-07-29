@@ -4,12 +4,19 @@ const db = firebase.firestore(firebaseApp);
 
 let currentUser = null;
 let currentProfile = null;
-let thaalis = [];
+let allUsers = [];
+let allTurns = [];
 let currentPreferences = null;
-let thaalisUnsub = null;
+let directoryNeedsReview = false;
+let directoryGroups = [];
+let addressFormFilled = false;
+let leaderboardChartInstance = null;
+const notifiedTurnKeys = new Set();
+
+let usersUnsub = null;
+let turnsUnsub = null;
 let preferencesUnsub = null;
 let settingsUnsub = null;
-let orderNeedsReview = false;
 
 const elements = {
   authPanel: document.getElementById('authPanel'),
@@ -17,21 +24,26 @@ const elements = {
   logoutBtn: document.getElementById('logoutBtn'),
   loginForm: document.getElementById('loginForm'),
   registerForm: document.getElementById('registerForm'),
-  thaaliForm: document.getElementById('thaaliForm'),
-  thaaliId: document.getElementById('thaaliId'),
-  adminPanel: document.getElementById('adminPanel'),
-  adminNotice: document.getElementById('adminNotice'),
-  formTitle: document.getElementById('formTitle'),
-  cancelEditBtn: document.getElementById('cancelEditBtn'),
-  formMessage: document.getElementById('formMessage'),
-  thaaliList: document.getElementById('thaaliList'),
-  orderList: document.getElementById('orderList'),
-  saveOrderBtn: document.getElementById('saveOrderBtn'),
-  noticeBanner: document.getElementById('noticeBanner'),
-  statsCount: document.getElementById('statsCount'),
-  volunteerCount: document.getElementById('volunteerCount'),
   profileName: document.getElementById('profileName'),
-  profileRole: document.getElementById('profileRole')
+  profileRole: document.getElementById('profileRole'),
+  statsMembers: document.getElementById('statsMembers'),
+  statsCompleted: document.getElementById('statsCompleted'),
+  statsUpcoming: document.getElementById('statsUpcoming'),
+  reminderBanner: document.getElementById('reminderBanner'),
+  noticeBanner: document.getElementById('noticeBanner'),
+  tabBar: document.getElementById('tabBar'),
+  directoryList: document.getElementById('directoryList'),
+  saveOrderBtn: document.getElementById('saveOrderBtn'),
+  myTurnsList: document.getElementById('myTurnsList'),
+  addressForm: document.getElementById('addressForm'),
+  addressMessage: document.getElementById('addressMessage'),
+  leaderboardChart: document.getElementById('leaderboardChart'),
+  leaderboardBody: document.getElementById('leaderboardBody'),
+  assignTurnForm: document.getElementById('assignTurnForm'),
+  turnUser: document.getElementById('turnUser'),
+  turnMessage: document.getElementById('turnMessage'),
+  allTurnsList: document.getElementById('allTurnsList'),
+  membersList: document.getElementById('membersList')
 };
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -43,39 +55,55 @@ function bindEvents() {
   elements.loginForm.addEventListener('submit', onLogin);
   elements.registerForm.addEventListener('submit', onRegister);
   elements.logoutBtn.addEventListener('click', onLogout);
-  elements.thaaliForm.addEventListener('submit', onSaveThaali);
-  elements.cancelEditBtn.addEventListener('click', resetThaaliForm);
-  elements.saveOrderBtn.addEventListener('click', saveUserOrder);
+  elements.saveOrderBtn.addEventListener('click', saveDirectoryOrder);
+  elements.addressForm.addEventListener('submit', onSaveAddress);
+  elements.assignTurnForm.addEventListener('submit', onAssignTurn);
+  elements.tabBar.addEventListener('click', (event) => {
+    const btn = event.target.closest('.tab-btn');
+    if (btn) setActiveTab(btn.dataset.tab);
+  });
+}
+
+function setActiveTab(tab) {
+  document.querySelectorAll('.tab-btn').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.tab === tab);
+  });
+  document.querySelectorAll('.tab-panel').forEach((panel) => {
+    panel.classList.toggle('active', panel.id === `tab-${tab}`);
+  });
 }
 
 async function handleAuthStateChange(user) {
   currentUser = user;
 
-  if (thaalisUnsub) thaalisUnsub();
+  if (usersUnsub) usersUnsub();
+  if (turnsUnsub) turnsUnsub();
   if (preferencesUnsub) preferencesUnsub();
   if (settingsUnsub) settingsUnsub();
 
   if (!user) {
     currentProfile = null;
     currentPreferences = null;
-    thaalis = [];
+    allUsers = [];
+    allTurns = [];
+    directoryGroups = [];
+    addressFormFilled = false;
     renderAuthUI();
-    renderDashboard();
+    renderAll();
     return;
   }
 
   try {
     await ensureUserProfile(user);
     renderAuthUI();
-    subscribeToThaalis();
+    subscribeToUsers();
+    subscribeToTurns();
     subscribeToPreferences();
     subscribeToSettings();
   } catch (error) {
     console.warn('Firestore access blocked:', error);
     renderAuthUI();
-    renderDashboard();
-    elements.formMessage.textContent = 'Signed in successfully, but Firestore access is blocked. Please update your Firestore rules.';
-    elements.formMessage.className = 'form-message error';
+    renderAll();
   }
 }
 
@@ -86,12 +114,15 @@ async function ensureUserProfile(user) {
 
     if (!existing.exists) {
       const adminSnapshot = await db.collection('users').where('role', '==', 'admin').limit(1).get();
-      const role = adminSnapshot.empty ? 'admin' : 'volunteer';
+      const role = adminSnapshot.empty ? 'admin' : 'member';
       const profile = {
         uid: user.uid,
         email: user.email,
         name: user.displayName || user.email.split('@')[0],
+        phone: '',
         role,
+        eligibleForKidmat: true,
+        address: { line1: '', area: '', city: '', notes: '' },
         createdAt: firebase.firestore.FieldValue.serverTimestamp()
       };
       await profileRef.set(profile);
@@ -106,7 +137,9 @@ async function ensureUserProfile(user) {
       uid: user.uid,
       email: user.email,
       name: user.displayName || user.email.split('@')[0],
-      role: 'volunteer'
+      role: 'member',
+      eligibleForKidmat: true,
+      address: {}
     };
   }
 }
@@ -117,7 +150,7 @@ function renderAuthUI() {
     elements.appShell.classList.remove('hidden');
     elements.logoutBtn.classList.remove('hidden');
     elements.profileName.textContent = currentProfile?.name || currentUser.email;
-    elements.profileRole.textContent = currentProfile?.role === 'admin' ? 'Administrator' : 'Volunteer';
+    elements.profileRole.textContent = currentProfile?.role === 'admin' ? 'Administrator' : 'Member';
   } else {
     elements.authPanel.classList.remove('hidden');
     elements.appShell.classList.add('hidden');
@@ -125,15 +158,31 @@ function renderAuthUI() {
   }
 }
 
-function subscribeToThaalis() {
-  thaalisUnsub = db.collection('thaalis').orderBy('createdAt', 'desc').onSnapshot(
+function subscribeToUsers() {
+  usersUnsub = db.collection('users').onSnapshot(
     (snapshot) => {
-      thaalis = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-      renderDashboard();
+      allUsers = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+      const me = allUsers.find((u) => u.id === currentUser.uid);
+      if (me) currentProfile = me;
+      computeDirectoryGroups();
+      renderAll();
     },
     (error) => {
-      console.warn('Thaali feed blocked:', error);
-      renderDashboard();
+      console.warn('Members feed blocked:', error);
+      renderAll();
+    }
+  );
+}
+
+function subscribeToTurns() {
+  turnsUnsub = db.collection('turns').onSnapshot(
+    (snapshot) => {
+      allTurns = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+      renderAll();
+    },
+    (error) => {
+      console.warn('Turns feed blocked:', error);
+      renderAll();
     }
   );
 }
@@ -142,161 +191,419 @@ function subscribeToPreferences() {
   preferencesUnsub = db.collection('userPreferences').doc(currentUser.uid).onSnapshot(
     (snapshot) => {
       currentPreferences = snapshot.exists ? snapshot.data() : null;
-      renderDashboard();
+      computeDirectoryGroups();
+      renderAll();
     },
     (error) => {
       console.warn('Preferences feed blocked:', error);
-      renderDashboard();
+      renderAll();
     }
   );
 }
 
 function subscribeToSettings() {
-  settingsUnsub = db.collection('settings').doc('deliveryOrder').onSnapshot(
+  settingsUnsub = db.collection('settings').doc('directory').onSnapshot(
     (snapshot) => {
-      if (snapshot.exists) {
-        orderNeedsReview = Boolean(snapshot.data().needsReview);
-      } else {
-        orderNeedsReview = false;
-      }
-      renderDashboard();
+      directoryNeedsReview = snapshot.exists ? Boolean(snapshot.data().needsReview) : false;
+      renderAll();
     },
     (error) => {
       console.warn('Settings feed blocked:', error);
-      renderDashboard();
+      renderAll();
     }
   );
 }
 
-function renderDashboard() {
-  if (!currentUser) {
-    elements.statsCount.textContent = '0';
-    elements.volunteerCount.textContent = '0';
-    elements.thaaliList.innerHTML = '<p class="muted">Sign in to view thaalis and manage your delivery order.</p>';
-    elements.orderList.innerHTML = '<p class="muted">Sign in to set your preferred delivery route.</p>';
-    return;
-  }
+/* ---------- Helpers ---------- */
 
-  const visibleThaalis = sortThaalisForCurrentUser(thaalis, currentPreferences);
-  const assignedVolunteerCount = visibleThaalis.filter((item) => item.volunteer).length;
-
-  elements.statsCount.textContent = visibleThaalis.length;
-  elements.volunteerCount.textContent = assignedVolunteerCount;
-
-  renderAdminPanel();
-  renderNotice();
-  renderThaaliList(visibleThaalis);
-  renderOrderEditor(visibleThaalis);
+function pad2(value) {
+  return String(value).padStart(2, '0');
 }
 
-function renderAdminPanel() {
-  if (!currentUser) {
-    elements.adminPanel.classList.add('hidden');
-    elements.adminNotice.classList.add('hidden');
-    return;
-  }
-
-  if (isAdmin()) {
-    elements.adminPanel.classList.remove('hidden');
-    elements.adminNotice.classList.add('hidden');
-  } else {
-    elements.adminPanel.classList.add('hidden');
-    elements.adminNotice.classList.remove('hidden');
-  }
+function todayStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 }
 
-function sortThaalisForCurrentUser(items, preferences) {
-  const preferredIds = preferences?.preferredOrder || [];
-  const seen = new Set();
-  const ordered = [];
-
-  preferredIds.forEach((id) => {
-    const item = items.find((entry) => entry.id === id);
-    if (item && !seen.has(item.id)) {
-      ordered.push(item);
-      seen.add(item.id);
-    }
-  });
-
-  items.forEach((item) => {
-    if (!seen.has(item.id)) {
-      ordered.push(item);
-      seen.add(item.id);
-    }
-  });
-
-  return ordered;
+function tomorrowStr() {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 }
 
-function renderNotice() {
-  if (!orderNeedsReview) {
-    elements.noticeBanner.classList.add('hidden');
-    elements.noticeBanner.innerHTML = '';
-    return;
-  }
-
-  elements.noticeBanner.classList.remove('hidden');
-  elements.noticeBanner.innerHTML = '<strong>Fresh update detected.</strong> A new thaali was added or a location was updated. Please review and save your delivery order.';
+function formatDisplayDate(dateStr) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const dt = new Date(y, m - 1, d);
+  return dt.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-function renderThaaliList(items) {
-  if (!items.length) {
-    elements.thaaliList.innerHTML = '<p class="muted">No thaali details yet. Add the first record with the form.</p>';
-    return;
-  }
-
-  elements.thaaliList.innerHTML = items.map((item) => {
-    const canEdit = isAdmin() || item.createdBy === currentUser.uid;
-    const deliveryDays = Array.isArray(item.deliveryDays) ? item.deliveryDays.join(', ') : 'Not assigned';
-    const volunteerLabel = item.volunteer ? item.volunteer : 'Pending';
-    const mapUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.location)}`;
-    return `
-      <article class="thaali-card">
-        <div class="thaali-card__top">
-          <div>
-            <h3><a href="${mapUrl}" target="_blank" rel="noopener">${escapeHtml(item.name)}</a></h3>
-            <p class="muted">${escapeHtml(item.personName || 'Community thaali')}</p>
-          </div>
-          <span class="badge">${escapeHtml(item.role || 'Community support')}</span>
-        </div>
-        <p><strong>Location:</strong> <a href="${mapUrl}" target="_blank" rel="noopener">${escapeHtml(item.location || 'To be confirmed')}</a></p>
-        <p><strong>Volunteer:</strong> ${escapeHtml(volunteerLabel)}</p>
-        <p><strong>Delivery days:</strong> ${escapeHtml(deliveryDays)}</p>
-        <p><strong>Contact:</strong> ${escapeHtml(item.contactPhone || 'Not listed')}</p>
-        <p class="muted">${escapeHtml(item.notes || 'No notes added yet.')}</p>
-        ${canEdit ? `
-          <div class="button-row">
-            <button type="button" class="secondary" onclick="editThaali('${item.id}')">Edit</button>
-            <button type="button" class="danger" onclick="deleteThaali('${item.id}')">Delete</button>
-          </div>` : ''}
-      </article>
-    `;
-  }).join('');
-}
-
-function renderOrderEditor(items) {
-  if (!items.length) {
-    elements.orderList.innerHTML = '<p class="muted">Add thaalis to build a delivery route.</p>';
-    return;
-  }
-
-  elements.orderList.innerHTML = items.map((item, index) => `
-    <div class="order-row">
-      <div>
-        <strong>${escapeHtml(item.name)}</strong>
-        <div class="muted">${escapeHtml(item.location || 'Location to be confirmed')}</div>
-      </div>
-      <div class="button-row">
-        <button type="button" class="secondary" ${index === 0 ? 'disabled' : ''} onclick="moveItem('${item.id}', -1)">↑</button>
-        <button type="button" class="secondary" ${index === items.length - 1 ? 'disabled' : ''} onclick="moveItem('${item.id}', 1)">↓</button>
-      </div>
-    </div>
-  `).join('');
+function deriveTurnStatus(turn) {
+  if (turn.status === 'completed') return 'completed';
+  return turn.date < todayStr() ? 'missed' : 'upcoming';
 }
 
 function isAdmin() {
   return currentProfile?.role === 'admin';
 }
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function addressKey(user) {
+  const line1 = (user.address?.line1 || '').trim();
+  if (!line1) return null;
+  const area = (user.address?.area || '').trim();
+  const city = (user.address?.city || '').trim();
+  return `${line1}|${area}|${city}`.toLowerCase();
+}
+
+function addressLabel(user) {
+  return [user.address?.line1, user.address?.area, user.address?.city].filter(Boolean).join(', ');
+}
+
+/* ---------- Directory grouping & ordering ---------- */
+
+function computeDirectoryGroups() {
+  const groupsByKey = new Map();
+
+  allUsers.forEach((user) => {
+    const key = addressKey(user);
+    if (!key) return;
+    if (!groupsByKey.has(key)) {
+      groupsByKey.set(key, { key, addressLabel: addressLabel(user), members: [] });
+    }
+    groupsByKey.get(key).members.push({ uid: user.id, name: user.name || user.email, phone: user.phone || '' });
+  });
+
+  const groups = Array.from(groupsByKey.values());
+  const preferredOrder = currentPreferences?.preferredOrder || [];
+  const seen = new Set();
+  const ordered = [];
+
+  preferredOrder.forEach((key) => {
+    const group = groups.find((g) => g.key === key);
+    if (group && !seen.has(key)) {
+      ordered.push(group);
+      seen.add(key);
+    }
+  });
+
+  groups.forEach((group) => {
+    if (!seen.has(group.key)) {
+      ordered.push(group);
+      seen.add(group.key);
+    }
+  });
+
+  directoryGroups = ordered;
+}
+
+function moveGroup(key, direction) {
+  const index = directoryGroups.findIndex((g) => g.key === key);
+  if (index === -1) return;
+  const target = index + direction;
+  if (target < 0 || target >= directoryGroups.length) return;
+  const reordered = [...directoryGroups];
+  const [group] = reordered.splice(index, 1);
+  reordered.splice(target, 0, group);
+  directoryGroups = reordered;
+  renderDirectoryList();
+}
+
+async function saveDirectoryOrder() {
+  try {
+    await db.collection('userPreferences').doc(currentUser.uid).set({
+      preferredOrder: directoryGroups.map((g) => g.key),
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    await db.collection('settings').doc('directory').set({
+      needsReview: false,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      message: 'Your delivery order is saved.'
+    }, { merge: true });
+  } catch (error) {
+    alert(error.message);
+  }
+}
+
+function navigateTo(addressText) {
+  const destination = encodeURIComponent(addressText);
+  const openWithOrigin = (lat, lng) => {
+    window.open(`https://www.google.com/maps/dir/?api=1&origin=${lat},${lng}&destination=${destination}&travelmode=driving`, '_blank', 'noopener');
+  };
+  const openWithoutOrigin = () => {
+    window.open(`https://www.google.com/maps/search/?api=1&query=${destination}`, '_blank', 'noopener');
+  };
+  if (!navigator.geolocation) {
+    openWithoutOrigin();
+    return;
+  }
+  navigator.geolocation.getCurrentPosition(
+    (pos) => openWithOrigin(pos.coords.latitude, pos.coords.longitude),
+    () => openWithoutOrigin(),
+    { timeout: 6000 }
+  );
+}
+
+/* ---------- Rendering ---------- */
+
+function renderAll() {
+  renderStats();
+  renderReminder();
+  renderNotice();
+  renderAdminVisibility();
+  renderDirectoryList();
+  renderMyTurns();
+  renderAddressForm();
+  renderLeaderboard();
+  renderTurnUserOptions();
+  renderAllTurnsList();
+  renderMembersList();
+}
+
+function renderStats() {
+  elements.statsMembers.textContent = allUsers.length;
+  elements.statsCompleted.textContent = allTurns.filter((t) => t.status === 'completed').length;
+  elements.statsUpcoming.textContent = allTurns.filter((t) => t.status !== 'completed' && t.date >= todayStr()).length;
+}
+
+function renderReminder() {
+  if (!currentUser) {
+    elements.reminderBanner.classList.add('hidden');
+    elements.reminderBanner.innerHTML = '';
+    return;
+  }
+
+  const tomorrow = tomorrowStr();
+  const myTurn = allTurns.find((t) => t.userId === currentUser.uid && t.date === tomorrow && t.status !== 'completed');
+
+  if (!myTurn) {
+    elements.reminderBanner.classList.add('hidden');
+    elements.reminderBanner.innerHTML = '';
+    return;
+  }
+
+  elements.reminderBanner.classList.remove('hidden');
+  const canOfferNotify = 'Notification' in window && Notification.permission === 'default';
+  elements.reminderBanner.innerHTML = `
+    <strong>Reminder:</strong> You have a delivery turn tomorrow (${formatDisplayDate(tomorrow)}).
+    ${canOfferNotify ? '<button type="button" class="btn btn--small btn--secondary" id="enableNotifyBtn">Enable notifications</button>' : ''}
+  `;
+  const notifyBtn = document.getElementById('enableNotifyBtn');
+  if (notifyBtn) notifyBtn.addEventListener('click', requestNotificationPermission);
+  maybeFireNotification(myTurn, tomorrow);
+}
+
+function requestNotificationPermission() {
+  if (!('Notification' in window)) return;
+  Notification.requestPermission().then(() => renderReminder());
+}
+
+function maybeFireNotification(turn, dateStr) {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  const key = `${turn.id}-${dateStr}`;
+  if (notifiedTurnKeys.has(key)) return;
+  notifiedTurnKeys.add(key);
+  new Notification('FMB Thaali Ezzi — turn tomorrow', {
+    body: `You have a delivery turn on ${formatDisplayDate(dateStr)}.`
+  });
+}
+
+function renderNotice() {
+  if (!currentUser || !directoryNeedsReview) {
+    elements.noticeBanner.classList.add('hidden');
+    elements.noticeBanner.innerHTML = '';
+    return;
+  }
+  elements.noticeBanner.classList.remove('hidden');
+  elements.noticeBanner.innerHTML = '<strong>Directory updated.</strong> A member address changed or a new member joined. Please review and save your delivery order.';
+}
+
+function renderAdminVisibility() {
+  document.querySelectorAll('.admin-only').forEach((el) => {
+    el.classList.toggle('hidden', !isAdmin());
+  });
+}
+
+function renderDirectoryList() {
+  if (!currentUser) {
+    elements.directoryList.innerHTML = '<p class="muted">Sign in to view the member directory.</p>';
+    return;
+  }
+  if (!directoryGroups.length) {
+    elements.directoryList.innerHTML = '<p class="muted">No drop-off addresses yet. Add yours from the My Address tab.</p>';
+    return;
+  }
+
+  elements.directoryList.innerHTML = directoryGroups.map((group, index) => `
+    <article class="directory-card">
+      <div class="directory-card__top">
+        <div>
+          <div class="directory-card__names">
+            ${group.members.map((m) => `<span class="name-chip">${escapeHtml(m.name)}</span>`).join('')}
+          </div>
+          <p><strong>Address:</strong> ${escapeHtml(group.addressLabel)}</p>
+          <p class="muted">${escapeHtml(group.members.map((m) => m.phone).filter(Boolean).join(' · ') || 'No phone on file')}</p>
+        </div>
+        <div class="button-row">
+          <button type="button" class="btn btn--primary btn--small" onclick="navigateTo('${escapeHtml(group.addressLabel).replace(/'/g, "\\'")}')">Navigate</button>
+        </div>
+      </div>
+      <div class="button-row">
+        <button type="button" class="btn btn--secondary btn--small" ${index === 0 ? 'disabled' : ''} onclick="moveGroup('${group.key}', -1)">Move up</button>
+        <button type="button" class="btn btn--secondary btn--small" ${index === directoryGroups.length - 1 ? 'disabled' : ''} onclick="moveGroup('${group.key}', 1)">Move down</button>
+      </div>
+    </article>
+  `).join('');
+}
+
+function renderMyTurns() {
+  if (!currentUser) {
+    elements.myTurnsList.innerHTML = '<p class="muted">Sign in to see your delivery turns.</p>';
+    return;
+  }
+  const myTurns = allTurns
+    .filter((t) => t.userId === currentUser.uid)
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  if (!myTurns.length) {
+    elements.myTurnsList.innerHTML = '<p class="muted">No turns assigned to you yet.</p>';
+    return;
+  }
+
+  elements.myTurnsList.innerHTML = myTurns.map((turn) => {
+    const status = deriveTurnStatus(turn);
+    return `
+      <article class="turn-card">
+        <div class="directory-card__top">
+          <div>
+            <p><strong>${formatDisplayDate(turn.date)}</strong></p>
+            <p class="muted">${escapeHtml(turn.notes || 'No notes')}</p>
+          </div>
+          <span class="badge badge--${status}">${status}</span>
+        </div>
+        ${status !== 'completed' ? `<div class="button-row"><button type="button" class="btn btn--primary btn--small" onclick="markTurnComplete('${turn.id}')">Mark as delivered</button></div>` : ''}
+      </article>
+    `;
+  }).join('');
+}
+
+function renderAddressForm() {
+  if (!currentUser || !currentProfile || addressFormFilled) return;
+  document.getElementById('myName').value = currentProfile.name || '';
+  document.getElementById('myPhone').value = currentProfile.phone || '';
+  document.getElementById('myLine1').value = currentProfile.address?.line1 || '';
+  document.getElementById('myArea').value = currentProfile.address?.area || '';
+  document.getElementById('myCity').value = currentProfile.address?.city || '';
+  document.getElementById('myNotes').value = currentProfile.address?.notes || '';
+  addressFormFilled = true;
+}
+
+function renderLeaderboard() {
+  const eligible = allUsers.filter((u) => u.eligibleForKidmat !== false);
+  const rows = eligible.map((user) => {
+    const userTurns = allTurns.filter((t) => t.userId === user.id);
+    const completed = userTurns.filter((t) => t.status === 'completed').length;
+    return {
+      name: user.name || user.email,
+      assigned: userTurns.length,
+      completed,
+      rate: userTurns.length ? Math.round((completed / userTurns.length) * 100) : 0
+    };
+  }).sort((a, b) => b.completed - a.completed || b.assigned - a.assigned || a.name.localeCompare(b.name));
+
+  elements.leaderboardBody.innerHTML = rows.length
+    ? rows.map((row, index) => `
+        <tr>
+          <td class="${index < 3 ? 'rank-medal' : ''}">#${index + 1}</td>
+          <td>${escapeHtml(row.name)}</td>
+          <td>${row.assigned}</td>
+          <td>${row.completed}</td>
+          <td>${row.rate}%</td>
+        </tr>
+      `).join('')
+    : '<tr><td colspan="5" class="muted">No kidmat-eligible members yet.</td></tr>';
+
+  if (typeof Chart === 'undefined' || !elements.leaderboardChart) return;
+  if (leaderboardChartInstance) leaderboardChartInstance.destroy();
+  leaderboardChartInstance = new Chart(elements.leaderboardChart, {
+    type: 'bar',
+    data: {
+      labels: rows.map((r) => r.name),
+      datasets: [
+        { label: 'Assigned', data: rows.map((r) => r.assigned), backgroundColor: '#caa447' },
+        { label: 'Completed', data: rows.map((r) => r.completed), backgroundColor: '#0b6e5a' }
+      ]
+    },
+    options: {
+      responsive: true,
+      scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
+    }
+  });
+}
+
+function renderTurnUserOptions() {
+  if (!isAdmin()) return;
+  const eligible = allUsers.filter((u) => u.eligibleForKidmat !== false).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  const currentValue = elements.turnUser.value;
+  elements.turnUser.innerHTML = '<option value="">Select a member</option>' +
+    eligible.map((u) => `<option value="${u.id}">${escapeHtml(u.name || u.email)}</option>`).join('');
+  if (eligible.some((u) => u.id === currentValue)) elements.turnUser.value = currentValue;
+}
+
+function renderAllTurnsList() {
+  if (!isAdmin()) return;
+  const sorted = [...allTurns].sort((a, b) => b.date.localeCompare(a.date));
+  if (!sorted.length) {
+    elements.allTurnsList.innerHTML = '<p class="muted">No turns assigned yet.</p>';
+    return;
+  }
+  elements.allTurnsList.innerHTML = sorted.map((turn) => {
+    const status = deriveTurnStatus(turn);
+    return `
+      <article class="turn-card">
+        <div class="directory-card__top">
+          <div>
+            <p><strong>${formatDisplayDate(turn.date)}</strong> — ${escapeHtml(turn.userName || 'Unknown member')}</p>
+            <p class="muted">${escapeHtml(turn.notes || 'No notes')}</p>
+          </div>
+          <span class="badge badge--${status}">${status}</span>
+        </div>
+        <div class="button-row">
+          ${status !== 'completed' ? `<button type="button" class="btn btn--primary btn--small" onclick="markTurnComplete('${turn.id}')">Mark completed</button>` : ''}
+          <button type="button" class="btn btn--danger btn--small" onclick="deleteTurn('${turn.id}')">Delete</button>
+        </div>
+      </article>
+    `;
+  }).join('');
+}
+
+function renderMembersList() {
+  if (!isAdmin()) return;
+  const sorted = [...allUsers].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  elements.membersList.innerHTML = sorted.map((user) => `
+    <article class="member-row directory-card__top">
+      <div>
+        <p><strong>${escapeHtml(user.name || user.email)}</strong></p>
+        <p class="muted">${escapeHtml(user.email)}</p>
+      </div>
+      <div class="button-row">
+        <span class="badge">${user.role === 'admin' ? 'Administrator' : 'Member'}</span>
+        <span class="badge ${user.eligibleForKidmat === false ? 'badge--missed' : 'badge--completed'}">${user.eligibleForKidmat === false ? 'Not eligible' : 'Eligible'}</span>
+        <button type="button" class="btn btn--secondary btn--small" onclick="toggleRole('${user.id}')">${user.role === 'admin' ? 'Make Member' : 'Make Admin'}</button>
+        <button type="button" class="btn btn--secondary btn--small" onclick="toggleEligibility('${user.id}')">${user.eligibleForKidmat === false ? 'Mark Eligible' : 'Mark Ineligible'}</button>
+      </div>
+    </article>
+  `).join('');
+}
+
+/* ---------- Auth actions ---------- */
 
 async function onLogin(event) {
   event.preventDefault();
@@ -323,12 +630,15 @@ async function onRegister(event) {
 
     try {
       const adminSnapshot = await db.collection('users').where('role', '==', 'admin').limit(1).get();
-      const role = adminSnapshot.empty ? 'admin' : 'volunteer';
+      const role = adminSnapshot.empty ? 'admin' : 'member';
       await db.collection('users').doc(result.user.uid).set({
         uid: result.user.uid,
         email: result.user.email,
         name,
+        phone: '',
         role,
+        eligibleForKidmat: true,
+        address: { line1: '', area: '', city: '', notes: '' },
         createdAt: firebase.firestore.FieldValue.serverTimestamp()
       }, { merge: true });
     } catch (firestoreError) {
@@ -349,149 +659,134 @@ async function onLogout() {
   }
 }
 
-async function onSaveThaali(event) {
+/* ---------- My Address ---------- */
+
+async function onSaveAddress(event) {
   event.preventDefault();
   const formData = new FormData(event.target);
-  const selectedDays = formData.getAll('deliveryDays');
-  const editingId = elements.thaaliId.value;
-  const existingThaali = editingId ? thaalis.find((entry) => entry.id === editingId) : null;
-  if (!isAdmin() && (!editingId || !existingThaali || existingThaali.createdBy !== currentUser.uid)) {
-    alert('Only admins can create new thaalis. Only the owner or an admin can edit an existing record.');
-    return;
-  }
-
   const payload = {
     name: formData.get('name').trim(),
-    personName: formData.get('personName').trim(),
-    location: formData.get('location').trim(),
-    role: formData.get('role').trim(),
-    contactPhone: formData.get('contactPhone').trim(),
-    notes: formData.get('notes').trim(),
-    volunteer: formData.get('volunteer').trim(),
-    deliveryDays: selectedDays,
-    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-    needsReorder: true
+    phone: formData.get('phone').trim(),
+    address: {
+      line1: formData.get('line1').trim(),
+      area: formData.get('area').trim(),
+      city: formData.get('city').trim(),
+      notes: formData.get('notes').trim()
+    },
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
   };
 
   try {
-    if (editingId) {
-      await db.collection('thaalis').doc(editingId).update(payload);
-    } else {
-      await db.collection('thaalis').add({
-        ...payload,
-        createdBy: currentUser.uid,
-        createdByName: currentProfile?.name || currentUser.email,
-        createdAt: firebase.firestore.FieldValue.serverTimestamp()
-      });
-    }
-
-    await db.collection('settings').doc('deliveryOrder').set({
+    await db.collection('users').doc(currentUser.uid).set(payload, { merge: true });
+    await db.collection('settings').doc('directory').set({
       needsReview: true,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-      message: 'A thaali record was updated. Please choose your preferred route.'
+      message: 'A member address was updated. Please review your delivery order.'
     }, { merge: true });
 
-    resetThaaliForm();
-    elements.formMessage.textContent = editingId ? 'Thaali updated successfully.' : 'Thaali added successfully.';
-    elements.formMessage.className = 'form-message success';
+    elements.addressMessage.textContent = 'Address saved successfully.';
+    elements.addressMessage.className = 'form-message success';
   } catch (error) {
-    elements.formMessage.textContent = error.message;
-    elements.formMessage.className = 'form-message error';
+    elements.addressMessage.textContent = error.message;
+    elements.addressMessage.className = 'form-message error';
   }
 }
 
-function resetThaaliForm() {
-  elements.thaaliForm.reset();
-  elements.thaaliId.value = '';
-  elements.formTitle.textContent = 'Add a thaali';
-  elements.cancelEditBtn.classList.add('hidden');
-  elements.formMessage.textContent = '';
-  elements.formMessage.className = 'form-message';
-}
+/* ---------- Turns ---------- */
 
-function editThaali(id) {
-  const item = thaalis.find((entry) => entry.id === id);
-  if (!item) return;
-  elements.thaaliId.value = item.id;
-  elements.formTitle.textContent = 'Edit thaali';
-  elements.cancelEditBtn.classList.remove('hidden');
-  document.getElementById('thaaliName').value = item.name || '';
-  document.getElementById('personName').value = item.personName || '';
-  document.getElementById('location').value = item.location || '';
-  document.getElementById('role').value = item.role || '';
-  document.getElementById('contactPhone').value = item.contactPhone || '';
-  document.getElementById('volunteer').value = item.volunteer || '';
-  document.getElementById('notes').value = item.notes || '';
-  const checkboxes = document.querySelectorAll('input[name="deliveryDays"]');
-  checkboxes.forEach((checkbox) => {
-    checkbox.checked = Array.isArray(item.deliveryDays) && item.deliveryDays.includes(checkbox.value);
-  });
-  window.scrollTo({ top: 0, behavior: 'smooth' });
-}
+async function onAssignTurn(event) {
+  event.preventDefault();
+  if (!isAdmin()) return;
+  const formData = new FormData(event.target);
+  const date = formData.get('date');
+  const userId = formData.get('userId');
+  const notes = formData.get('notes').trim();
+  const member = allUsers.find((u) => u.id === userId);
 
-async function deleteThaali(id) {
-  const item = thaalis.find((entry) => entry.id === id);
-  if (!item) return;
-  const canDelete = isAdmin() || item.createdBy === currentUser.uid;
-  if (!canDelete) {
-    alert('Only an admin or the creator can delete this thaali.');
+  if (!date || !userId || !member) {
+    elements.turnMessage.textContent = 'Pick a date and a member.';
+    elements.turnMessage.className = 'form-message error';
     return;
   }
-  if (!confirm(`Delete ${item.name}?`)) return;
+
   try {
-    await db.collection('thaalis').doc(id).delete();
-    await db.collection('settings').doc('deliveryOrder').set({
-      needsReview: true,
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-      message: 'A thaali was removed. Please update your route if needed.'
-    }, { merge: true });
+    const existing = allTurns.find((t) => t.date === date);
+    const payload = {
+      date,
+      userId,
+      userName: member.name || member.email,
+      notes,
+      status: 'upcoming',
+      assignedBy: currentUser.uid,
+      assignedAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+
+    if (existing) {
+      await db.collection('turns').doc(existing.id).update(payload);
+    } else {
+      await db.collection('turns').add(payload);
+    }
+
+    event.target.reset();
+    elements.turnMessage.textContent = existing ? 'Turn reassigned successfully.' : 'Turn assigned successfully.';
+    elements.turnMessage.className = 'form-message success';
   } catch (error) {
-    alert(error.message);
+    elements.turnMessage.textContent = error.message;
+    elements.turnMessage.className = 'form-message error';
   }
 }
 
-async function saveUserOrder() {
-  const preferredOrder = thaalis
-    .map((item) => item.id)
-    .filter(Boolean);
-
+async function markTurnComplete(turnId) {
   try {
-    await db.collection('userPreferences').doc(currentUser.uid).set({
-      preferredOrder,
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    await db.collection('turns').doc(turnId).update({
+      status: 'completed',
+      completedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      completedBy: currentUser.uid
     });
-
-    await db.collection('settings').doc('deliveryOrder').set({
-      needsReview: false,
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-      message: 'Your delivery order is saved.'
-    }, { merge: true });
   } catch (error) {
     alert(error.message);
   }
 }
 
-function moveItem(id, direction) {
-  const currentIndex = thaalis.findIndex((item) => item.id === id);
-  if (currentIndex === -1) return;
-  const targetIndex = currentIndex + direction;
-  if (targetIndex < 0 || targetIndex >= thaalis.length) return;
-  const reordered = [...thaalis];
-  const [item] = reordered.splice(currentIndex, 1);
-  reordered.splice(targetIndex, 0, item);
-  thaalis = reordered;
-  renderDashboard();
+async function deleteTurn(turnId) {
+  if (!confirm('Delete this turn assignment?')) return;
+  try {
+    await db.collection('turns').doc(turnId).delete();
+  } catch (error) {
+    alert(error.message);
+  }
 }
 
-function escapeHtml(value) {
-  return String(value)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
+/* ---------- Admin: members ---------- */
+
+async function toggleRole(uid) {
+  const user = allUsers.find((u) => u.id === uid);
+  if (!user) return;
+  const admins = allUsers.filter((u) => u.role === 'admin');
+  if (user.role === 'admin' && admins.length <= 1) {
+    alert('At least one administrator is required. Promote another member first.');
+    return;
+  }
+  try {
+    await db.collection('users').doc(uid).update({ role: user.role === 'admin' ? 'member' : 'admin' });
+  } catch (error) {
+    alert(error.message);
+  }
 }
 
-window.editThaali = editThaali;
-window.deleteThaali = deleteThaali;
-window.moveItem = moveItem;
+async function toggleEligibility(uid) {
+  const user = allUsers.find((u) => u.id === uid);
+  if (!user) return;
+  try {
+    await db.collection('users').doc(uid).update({ eligibleForKidmat: user.eligibleForKidmat === false });
+  } catch (error) {
+    alert(error.message);
+  }
+}
+
+window.moveGroup = moveGroup;
+window.navigateTo = navigateTo;
+window.markTurnComplete = markTurnComplete;
+window.deleteTurn = deleteTurn;
+window.toggleRole = toggleRole;
+window.toggleEligibility = toggleEligibility;

@@ -4,6 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>FMB Thaali Ezzi Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="css/style.css" />
   </head>
   <body>
@@ -22,7 +24,7 @@
       <section id="authPanel" class="auth-shell card">
         <div class="auth-shell__intro">
           <h2>Welcome</h2>
-          <p>Create an account or sign in to view thaali records, assign volunteers, and save your personal route order.</p>
+          <p>Create an account or sign in to view the member directory, manage your drop-off address, track delivery turns, and see the kidmat leaderboard.</p>
         </div>
         <div class="auth-grid">
           <form id="loginForm" class="panel-form">
@@ -44,89 +46,160 @@
       <section id="appShell" class="hidden">
         <section class="card stats-card">
           <div>
-            <p class="eyebrow">Thaali count</p>
-            <h2 id="statsCount">0</h2>
+            <p class="eyebrow">Members</p>
+            <h2 id="statsMembers">0</h2>
           </div>
           <div>
-            <p class="eyebrow">Assigned volunteers</p>
-            <h2 id="volunteerCount">0</h2>
+            <p class="eyebrow">Turns completed</p>
+            <h2 id="statsCompleted">0</h2>
+          </div>
+          <div>
+            <p class="eyebrow">Turns upcoming</p>
+            <h2 id="statsUpcoming">0</h2>
           </div>
           <div class="profile-card">
             <p class="eyebrow">Signed in as</p>
             <h3 id="profileName">User</h3>
-            <p id="profileRole">Volunteer</p>
+            <p id="profileRole">Member</p>
           </div>
         </section>
 
+        <div id="reminderBanner" class="reminder-banner hidden"></div>
         <div id="noticeBanner" class="notice-banner hidden"></div>
 
-        <section id="adminPanel" class="card">
+        <nav id="tabBar" class="tab-bar">
+          <button class="tab-btn active" type="button" data-tab="overview">Overview</button>
+          <button class="tab-btn" type="button" data-tab="directory">Directory</button>
+          <button class="tab-btn" type="button" data-tab="turns">My Turns</button>
+          <button class="tab-btn" type="button" data-tab="address">My Address</button>
+          <button class="tab-btn" type="button" data-tab="leaderboard">Leaderboard</button>
+          <button class="tab-btn admin-only hidden" type="button" data-tab="admin-turns">Assign Turns</button>
+          <button class="tab-btn admin-only hidden" type="button" data-tab="admin-members">Members</button>
+        </nav>
+
+        <section id="tab-overview" class="tab-panel active card">
           <div class="section-heading">
             <div>
-              <p class="eyebrow">Admin tools</p>
-              <h2 id="formTitle">Add a thaali</h2>
+              <p class="eyebrow">Salaams</p>
+              <h2>Sector overview</h2>
             </div>
-            <button id="cancelEditBtn" class="btn btn--secondary hidden" type="button">Cancel Edit</button>
           </div>
-          <p id="adminNotice" class="muted hidden">Only admins can add or edit thaali details. Volunteers can still save their personal delivery route order.</p>
-          <form id="thaaliForm" class="stacked-form">
-            <input type="hidden" id="thaaliId" name="thaaliId" />
+          <p class="muted">Use the tabs above to view the address directory, manage your own drop-off address, track your delivery turns, and check the kidmat leaderboard. Notices about updates and reminders for turns due tomorrow will appear here.</p>
+        </section>
+
+        <section id="tab-directory" class="tab-panel card">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Member directory</p>
+              <h2>Drop-off addresses</h2>
+            </div>
+            <button id="saveOrderBtn" class="btn btn--primary" type="button">Save Order</button>
+          </div>
+          <p class="muted">Members sharing the same address are grouped into one stop. Reorder to match your preferred delivery route, then save. Click Navigate to route from your current location.</p>
+          <div id="directoryList" class="list-stack"></div>
+        </section>
+
+        <section id="tab-turns" class="tab-panel card">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Kidmat roster</p>
+              <h2>My delivery turns</h2>
+            </div>
+          </div>
+          <p class="muted">Mark a turn as delivered once you've completed your route for that day.</p>
+          <div id="myTurnsList" class="list-stack"></div>
+        </section>
+
+        <section id="tab-address" class="tab-panel card">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Self-service</p>
+              <h2>My drop-off address</h2>
+            </div>
+          </div>
+          <form id="addressForm" class="stacked-form">
             <div class="field-grid">
-              <label>Thaali Name<input id="thaaliName" type="text" name="name" required /></label>
-              <label>Person Name<input id="personName" type="text" name="personName" /></label>
-              <label>Location<input id="location" type="text" name="location" required /></label>
-              <label>Role<input id="role" type="text" name="role" placeholder="Example: kitchen lead" /></label>
-              <label>Volunteer<input id="volunteer" type="text" name="volunteer" placeholder="Volunteer name" /></label>
-              <label>Phone<input id="contactPhone" type="text" name="contactPhone" /></label>
+              <label>Full Name<input id="myName" type="text" name="name" required /></label>
+              <label>Phone<input id="myPhone" type="text" name="phone" /></label>
             </div>
-            <label>Delivery Days</label>
-            <div class="checkbox-row">
-              <label><input type="checkbox" name="deliveryDays" value="Sunday" /> Sunday</label>
-              <label><input type="checkbox" name="deliveryDays" value="Monday" /> Monday</label>
-              <label><input type="checkbox" name="deliveryDays" value="Tuesday" /> Tuesday</label>
-              <label><input type="checkbox" name="deliveryDays" value="Wednesday" /> Wednesday</label>
-              <label><input type="checkbox" name="deliveryDays" value="Thursday" /> Thursday</label>
-              <label><input type="checkbox" name="deliveryDays" value="Friday" /> Friday</label>
-              <label><input type="checkbox" name="deliveryDays" value="Saturday" /> Saturday</label>
+            <div class="field-grid">
+              <label>Address Line<input id="myLine1" type="text" name="line1" placeholder="Street / apartment" required /></label>
+              <label>Area / Subdivision<input id="myArea" type="text" name="area" /></label>
+              <label>City<input id="myCity" type="text" name="city" /></label>
             </div>
-            <label>Notes<textarea id="notes" name="notes" rows="3"></textarea></label>
+            <label>Notes<textarea id="myNotes" name="notes" rows="2" placeholder="Gate code, landmark, etc."></textarea></label>
             <div class="button-row">
-              <button class="btn btn--primary" type="submit">Save Thaali</button>
+              <button class="btn btn--primary" type="submit">Save Address</button>
             </div>
-            <p id="formMessage" class="form-message"></p>
+            <p id="addressMessage" class="form-message"></p>
           </form>
         </section>
 
-        <section class="dashboard-grid">
-          <section class="card">
-            <div class="section-heading">
-              <div>
-                <p class="eyebrow">Thaali directory</p>
-                <h2>Available thaalis</h2>
-              </div>
+        <section id="tab-leaderboard" class="tab-panel card">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Kidmat leaderboard</p>
+              <h2>Turns taken &amp; completed</h2>
             </div>
-            <div id="thaaliList" class="list-stack"></div>
-          </section>
+          </div>
+          <div class="chart-wrap">
+            <canvas id="leaderboardChart" height="120"></canvas>
+          </div>
+          <div style="overflow-x:auto;">
+            <table class="leaderboard-table">
+              <thead>
+                <tr><th>Rank</th><th>Member</th><th>Assigned</th><th>Completed</th><th>Completion</th></tr>
+              </thead>
+              <tbody id="leaderboardBody"></tbody>
+            </table>
+          </div>
+        </section>
 
-          <section class="card">
-            <div class="section-heading">
-              <div>
-                <p class="eyebrow">Personal route</p>
-                <h2>Delivery order</h2>
-              </div>
-              <button id="saveOrderBtn" class="btn btn--primary" type="button">Save Order</button>
+        <section id="tab-admin-turns" class="tab-panel card admin-only hidden">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Admin tools</p>
+              <h2>Assign a delivery turn</h2>
             </div>
-            <p class="muted">Reorder the locations and save them for future use.</p>
-            <div id="orderList" class="list-stack"></div>
-          </section>
+          </div>
+          <form id="assignTurnForm" class="stacked-form">
+            <div class="field-grid">
+              <label>Date<input id="turnDate" type="date" name="date" required /></label>
+              <label>Member
+                <select id="turnUser" name="userId" required>
+                  <option value="">Select a member</option>
+                </select>
+              </label>
+            </div>
+            <label>Notes<input id="turnNotes" type="text" name="notes" placeholder="Optional" /></label>
+            <div class="button-row">
+              <button class="btn btn--primary" type="submit">Assign Turn</button>
+            </div>
+            <p id="turnMessage" class="form-message"></p>
+          </form>
+          <div class="section-heading" style="margin-top:20px;">
+            <h3>Upcoming &amp; recent turns</h3>
+          </div>
+          <div id="allTurnsList" class="list-stack"></div>
+        </section>
+
+        <section id="tab-admin-members" class="tab-panel card admin-only hidden">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Admin tools</p>
+              <h2>Members</h2>
+            </div>
+          </div>
+          <div id="membersList" class="list-stack"></div>
         </section>
       </section>
     </main>
 
-    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js?v=20260711"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js?v=20260711"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js?v=20260711"></script>
-    <script src="js/firebase-config.js?v=20260711"></script>
-    <script src="js/app.js?v=20260711"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js?v=20260728"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js?v=20260728"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js?v=20260728"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+    <script src="js/firebase-config.js?v=20260728"></script>
+    <script src="js/app.js?v=20260728"></script>
   </body>
 </html>
